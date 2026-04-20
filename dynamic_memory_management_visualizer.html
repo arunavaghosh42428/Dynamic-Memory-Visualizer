@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamic Memory Management Visualizer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0c10;
+    --surface: #0f1319;
+    --surface2: #161b24;
+    --border: #1e2633;
+    --accent: #00d4ff;
+    --accent2: #7c3aed;
+    --green: #00ff88;
+    --orange: #ff6b35;
+    --red: #ff3d5a;
+    --yellow: #ffd60a;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, var(--surface) 0%, rgba(124,58,237,0.1) 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    backdrop-filter: blur(10px);
+  }
+
+  .header-logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .header-title {
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 800;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.5px;
+  }
+
+  .header-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .header-badge {
+    margin-left: auto;
+    background: rgba(0,212,255,0.1);
+    border: 1px solid rgba(0,212,255,0.3);
+    color: var(--accent);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    gap: 4px;
+  }
+
+  .tab {
+    padding: 12px 18px;
+    font-size: 12px;
+    font-family: var(--mono);
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* Main layout */
+  .content { padding: 24px; display: grid; gap: 20px; }
+
+  /* Panel */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.5px;
+  }
+
+  .panel-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .panel-body { padding: 20px; }
+
+  /* Controls */
+  .control-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  label { font-size: 11px; color: var(--muted); }
+
+  input[type="number"], input[type="text"], select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    outline: none;
+    width: 90px;
+    transition: border-color 0.2s;
+  }
+
+  input:focus, select:focus { border-color: var(--accent); }
+
+  select { width: auto; cursor: pointer; }
+
+  .btn {
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover { background: #33ddff; transform: translateY(-1px); box-shadow: 0 4px 15px rgba(0,212,255,0.3); }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover { background: #ff6b7a; }
+  .btn-success { background: var(--green); color: var(--bg); }
+  .btn-success:hover { background: #33ffaa; }
+  .btn-warn { background: var(--orange); color: #fff; }
+  .btn-warn:hover { opacity: 0.85; }
+  .btn-purple { background: var(--accent2); color: #fff; }
+  .btn-purple:hover { background: #9d5af0; }
+
+  /* Memory Grid */
+  .mem-grid {
+    display: grid;
+    gap: 3px;
+    margin-top: 12px;
+  }
+
+  .mem-cell {
+    height: 32px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
+    cursor: default;
+    border: 1px solid transparent;
+  }
+
+  .mem-cell.free {
+    background: rgba(30,38,51,0.8);
+    border-color: var(--border);
+    color: var(--muted);
+  }
+
+  .mem-cell.allocated {
+    border-color: rgba(0,212,255,0.3);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  .mem-cell.page-fault {
+    animation: fault-flash 0.5s ease;
+  }
+
+  @keyframes fault-flash {
+    0% { background: var(--red); }
+    100% {}
+  }
+
+  .mem-cell.highlight {
+    border-color: var(--yellow);
+    box-shadow: 0 0 8px rgba(255,214,10,0.4);
+  }
+
+  /* Page Table */
+  .page-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .page-table th {
+    background: var(--surface2);
+    color: var(--muted);
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+  .page-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(30,38,51,0.5);
+    transition: background 0.2s;
+  }
+  .page-table tr:hover td { background: rgba(0,212,255,0.05); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .badge-valid { background: rgba(0,255,136,0.15); color: var(--green); }
+  .badge-invalid { background: rgba(255,61,90,0.15); color: var(--red); }
+  .badge-present { background: rgba(0,212,255,0.15); color: var(--accent); }
+  .badge-modified { background: rgba(255,107,53,0.15); color: var(--orange); }
+
+  /* Stats */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-family: var(--sans);
+    font-size: 24px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .stat-label { font-size: 10px; color: var(--muted); margin-top: 4px; letter-spacing: 0.5px; }
+
+  /* Address translation */
+  .addr-flow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px;
+    background: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .addr-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+    min-width: 100px;
+  }
+
+  .addr-box-label { font-size: 9px; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.5px; }
+  .addr-box-val { font-size: 14px; font-weight: 700; color: var(--accent); }
+
+  .addr-arrow { color: var(--muted); font-size: 18px; }
+
+  /* Log */
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    height: 130px;
+    overflow-y: auto;
+    font-size: 11px;
+  }
+
+  .log-entry { padding: 2px 0; border-bottom: 1px solid rgba(30,38,51,0.5); }
+  .log-entry:last-child { border-bottom: none; }
+  .log-ok { color: var(--green); }
+  .log-err { color: var(--red); }
+  .log-info { color: var(--accent); }
+  .log-warn { color: var(--orange); }
+
+  /* Segment bars */
+  .seg-bar-container {
+    display: flex;
+    height: 48px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-top: 12px;
+  }
+
+  .seg-bar-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    transition: all 0.4s;
+    cursor: default;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+  }
+
+  /* Page replacement */
+  .frames-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+
+  .frame-box {
+    width: 56px; height: 56px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    border: 2px solid var(--border);
+    transition: all 0.3s;
+    font-family: var(--mono);
+    position: relative;
+  }
+
+  .frame-box.occupied {
+    background: rgba(0,212,255,0.1);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .frame-box.fault {
+    background: rgba(255,61,90,0.2);
+    border-color: var(--red);
+    color: var(--red);
+    animation: shake 0.3s ease;
+  }
+
+  .frame-box.hit {
+    background: rgba(0,255,136,0.15);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .frame-box.evict {
+    background: rgba(255,107,53,0.15);
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  .frame-label {
+    position: absolute;
+    bottom: -18px;
+    font-size: 9px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  .ref-string { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 12px; }
+
+  .ref-chip {
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: all 0.3s;
+    font-family: var(--mono);
+  }
+
+  .ref-chip.current { border-color: var(--yellow); color: var(--yellow); background: rgba(255,214,10,0.1); }
+  .ref-chip.hit-chip { border-color: var(--green); color: var(--green); background: rgba(0,255,136,0.1); }
+  .ref-chip.fault-chip { border-color: var(--red); color: var(--red); background: rgba(255,61,90,0.1); }
+
+  /* Two column layout */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  .hidden { display: none !important; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .util-bar-bg {
+    background: var(--bg);
+    border-radius: 4px;
+    height: 8px;
+    overflow: hidden;
+    margin-top: 6px;
+  }
+  .util-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .tip {
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-top: 12px;
+  }
+
+  .tip span { color: var(--yellow); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-logo">🧠</div>
+    <div>
+      <div class="header-title">Dynamic Memory Management Visualizer</div>
+      <div class="header-sub">OS Concepts — Paging · Segmentation · Virtual Memory · Page Replacement</div>
+    </div>
+    <div class="header-badge">CSE 2E046 — CA2</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('paging')">📄 Paging</div>
+    <div class="tab" onclick="switchTab('segmentation')">🗂️ Segmentation</div>
+    <div class="tab" onclick="switchTab('virtual')">💾 Virtual Memory</div>
+    <div class="tab" onclick="switchTab('replacement')">🔄 Page Replacement</div>
+  </div>
+
+  <!-- ===== PAGING TAB ===== -->
+  <div id="tab-paging" class="content">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-val" id="pg-total-frames">16</div>
+        <div class="stat-label">TOTAL FRAMES</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pg-free-frames">16</div>
+        <div class="stat-label">FREE FRAMES</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pg-used-pct">0%</div>
+        <div class="stat-label">UTILIZATION</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="pg-processes">0</div>
+        <div class="stat-label">PROCESSES</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-dot" style="background:var(--accent)"></div>
+          PHYSICAL MEMORY — 16 Frames (Page Size: 1KB)
+        </div>
+        <div class="panel-body">
+          <div class="mem-grid" id="paging-grid" style="grid-template-columns: repeat(8, 1fr);">
+          </div>
+
+          <div style="margin-top:16px;">
+            <div style="font-size:11px; color:var(--muted); margin-bottom:8px;">MEMORY UTILIZATION</div>
+            <div class="util-bar-bg"><div class="util-bar-fill" id="util-fill" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-dot" style="background:var(--green)"></div>
+          ALLOCATE / DEALLOCATE PROCESS
+        </div>
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Process ID</label>
+            <input type="text" id="pg-pid" value="P1" style="width:70px">
+            <label>Pages Needed</label>
+            <input type="number" id="pg-pages" value="3" min="1" max="8" style="width:70px">
+            <button class="btn btn-primary" onclick="allocateProcess()">+ Allocate</button>
+            <button class="btn btn-danger" onclick="deallocateProcess()">− Free</button>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">ADDRESS TRANSLATION</div>
+          <div class="control-row">
+            <label>Logical Addr (hex)</label>
+            <input type="text" id="pg-logaddr" value="0x0A40" style="width:90px">
+            <label>Page Size (B)</label>
+            <input type="number" id="pg-pagesize" value="1024" style="width:80px">
+            <button class="btn btn-purple" onclick="translateAddress()">Translate →</button>
+          </div>
+
+          <div class="addr-flow" id="addr-flow-paging">
+            <div class="addr-box">
+              <div class="addr-box-label">LOGICAL</div>
+              <div class="addr-box-val" id="af-logical">—</div>
+            </div>
+            <div class="addr-arrow">→</div>
+            <div class="addr-box">
+              <div class="addr-box-label">PAGE #</div>
+              <div class="addr-box-val" id="af-page">—</div>
+            </div>
+            <div class="addr-arrow">+</div>
+            <div class="addr-box">
+              <div class="addr-box-label">OFFSET</div>
+              <div class="addr-box-val" id="af-offset">—</div>
+            </div>
+            <div class="addr-arrow">→</div>
+            <div class="addr-box">
+              <div class="addr-box-label">PHYSICAL</div>
+              <div class="addr-box-val" id="af-physical" style="color:var(--green)">—</div>
+            </div>
+          </div>
+
+          <div class="tip"><span>💡 TIP:</span> Logical address = Page# × PageSize + Offset. Page table maps page# → frame#.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-dot" style="background:var(--yellow)"></div>
+        PAGE TABLE
+      </div>
+      <div class="panel-body" style="padding:0">
+        <table class="page-table" id="page-table-view">
+          <thead>
+            <tr>
+              <th>Process</th><th>Page #</th><th>Frame #</th><th>Valid</th><th>Modified</th><th>Physical Addr</th>
+            </tr>
+          </thead>
+          <tbody id="page-table-body">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No pages allocated. Add a process above.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><div class="panel-dot" style="background:var(--orange)"></div>ACTIVITY LOG</div>
+      <div class="panel-body" style="padding:12px">
+        <div class="log" id="paging-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SEGMENTATION TAB ===== -->
+  <div id="tab-segmentation" class="content hidden">
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-dot" style="background:var(--accent2)"></div>MEMORY MAP — Segmentation</div>
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Segment Name</label>
+            <input type="text" id="seg-name" value="Code" style="width:80px">
+            <label>Size (KB)</label>
+            <input type="number" id="seg-size" value="20" min="1" max="100" style="width:70px">
+            <button class="btn btn-primary" onclick="addSegment()">Add Segment</button>
+            <button class="btn btn-danger" onclick="clearSegments()">Clear All</button>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">MEMORY LAYOUT (Total: 256 KB)</div>
+          <div class="seg-bar-container" id="seg-bar"></div>
+
+          <div class="tip" style="margin-top:24px"><span>💡 TIP:</span> Segmentation divides memory into variable-size logical units (code, stack, heap, data). External fragmentation can occur.</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-dot" style="background:var(--green)"></div>SEGMENT TABLE</div>
+        <div class="panel-body" style="padding:0">
+          <table class="page-table" id="seg-table">
+            <thead>
+              <tr><th>Segment</th><th>Base (KB)</th><th>Limit (KB)</th><th>Size</th><th>Type</th><th>Action</th></tr>
+            </thead>
+            <tbody id="seg-table-body">
+              <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No segments. Add one above.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><div class="panel-dot" style="background:var(--yellow)"></div>ADDRESS TRANSLATION — Segmentation</div>
+      <div class="panel-body">
+        <div class="control-row">
+          <label>Segment #</label>
+          <input type="number" id="seg-trans-num" value="0" min="0" style="width:70px">
+          <label>Offset (KB)</label>
+          <input type="number" id="seg-trans-offset" value="5" min="0" style="width:70px">
+          <button class="btn btn-purple" onclick="translateSegAddr()">Translate →</button>
+        </div>
+        <div class="addr-flow">
+          <div class="addr-box">
+            <div class="addr-box-label">SEGMENT #</div>
+            <div class="addr-box-val" id="sa-seg">—</div>
+          </div>
+          <div class="addr-arrow">→</div>
+          <div class="addr-box">
+            <div class="addr-box-label">BASE</div>
+            <div class="addr-box-val" id="sa-base">—</div>
+          </div>
+          <div class="addr-arrow">+</div>
+          <div class="addr-box">
+            <div class="addr-box-label">OFFSET</div>
+            <div class="addr-box-val" id="sa-offset">—</div>
+          </div>
+          <div class="addr-arrow">→</div>
+          <div class="addr-box">
+            <div class="addr-box-label">PHYSICAL</div>
+            <div class="addr-box-val" id="sa-physical" style="color:var(--green)">—</div>
+          </div>
+          <div class="addr-box" id="sa-status-box" style="border-color:var(--red)">
+            <div class="addr-box-label">STATUS</div>
+            <div class="addr-box-val" id="sa-status" style="color:var(--red)">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== VIRTUAL MEMORY TAB ===== -->
+  <div id="tab-virtual" class="content hidden">
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header"><div class="panel-dot" style="background:var(--accent)"></div>VIRTUAL MEMORY SIMULATION</div>
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Physical Frames</label>
+            <input type="number" id="vm-frames" value="4" min="2" max="8">
+            <label>Virtual Pages</label>
+            <input type="number" id="vm-vpages" value="8" min="4" max="16">
+            <button class="btn btn-primary" onclick="initVM()">Initialize</button>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;margin-top:4px;">PHYSICAL FRAMES</div>
+          <div class="frames-row" id="vm-frames-view"></div>
+
+          <div style="margin-top:28px;font-size:11px;color:var(--muted);margin-bottom:8px;">VIRTUAL PAGE TABLE</div>
+          <table class="page-table" id="vm-page-table">
+            <thead>
+              <tr><th>Virtual Page</th><th>Frame</th><th>Present</th><th>Last Used</th></tr>
+            </thead>
+            <tbody id="vm-pt-body">
+              <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px">Initialize VM first</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><div class="panel-dot" style="background:var(--green)"></div>ACCESS PAGES — Demand Paging</div>
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Access Virtual Page #</label>
+            <input type="number" id="vm-access-page" value="0" min="0" style="width:70px">
+            <button class="btn btn-success" onclick="accessPage()">Access Page</button>
+          </div>
+
+          <div class="stats-grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div class="stat-card">
+              <div class="stat-val" id="vm-hits">0</div>
+              <div class="stat-label">PAGE HITS</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-val" id="vm-faults">0</div>
+              <div class="stat-label">PAGE FAULTS</div>
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">HIT RATE</div>
+          <div class="util-bar-bg"><div class="util-bar-fill" id="vm-hit-bar" style="width:0%;background:linear-gradient(90deg,var(--green),var(--accent))"></div></div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px;" id="vm-hit-pct">0.0% hit rate</div>
+
+          <div style="margin-top:16px;font-size:11px;color:var(--muted);margin-bottom:4px;">SWAP SPACE (Disk)</div>
+          <div class="frames-row" id="vm-swap-view" style="gap:4px;"></div>
+
+          <div class="tip"><span>⚡ Demand Paging:</span> Pages are loaded only when accessed. A page fault triggers a disk read (swap-in).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><div class="panel-dot" style="background:var(--orange)"></div>VM EVENT LOG</div>
+      <div class="panel-body" style="padding:12px">
+        <div class="log" id="vm-log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== PAGE REPLACEMENT TAB ===== -->
+  <div id="tab-replacement" class="content hidden">
+    <div class="panel">
+      <div class="panel-header"><div class="panel-dot" style="background:var(--accent2)"></div>PAGE REPLACEMENT ALGORITHM SIMULATOR</div>
+      <div class="panel-body">
+        <div class="control-row">
+          <label>Algorithm</label>
+          <select id="pr-algo">
+            <option value="fifo">FIFO (First In First Out)</option>
+            <option value="lru">LRU (Least Recently Used)</option>
+            <option value="optimal">Optimal (Belady's)</option>
+          </select>
+          <label>Frames</label>
+          <input type="number" id="pr-frames" value="3" min="1" max="6" style="width:60px">
+          <label>Reference String</label>
+          <input type="text" id="pr-refstr" value="7,0,1,2,0,3,0,4,2,3,0,3,2" style="width:200px">
+          <button class="btn btn-primary" onclick="runReplacement()">▶ Simulate</button>
+          <button class="btn btn-warn" onclick="stepReplacement()">Step →</button>
+          <button class="btn btn-danger" onclick="resetReplacement()">Reset</button>
+        </div>
+
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">REFERENCE STRING</div>
+        <div class="ref-string" id="ref-string-view"></div>
+
+        <div style="font-size:11px;color:var(--muted);margin-top:16px;margin-bottom:8px;">FRAME CONTENTS</div>
+        <div class="frames-row" id="pr-frames-view" style="margin-bottom:24px;"></div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card">
+            <div class="stat-val" id="pr-total">0</div>
+            <div class="stat-label">TOTAL REFS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="pr-faults">0</div>
+            <div class="stat-label">PAGE FAULTS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="pr-hits">0</div>
+            <div class="stat-label">PAGE HITS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="pr-ratio">—</div>
+            <div class="stat-label">FAULT RATE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header"><div class="panel-dot" style="background:var(--orange)"></div>STEP-BY-STEP LOG</div>
+      <div class="panel-body" style="padding:12px">
+        <div class="log" id="pr-log" style="height:160px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== STATE =====================
+const COLORS = ['#00d4ff','#7c3aed','#00ff88','#ff6b35','#ffd60a','#ff3d5a','#a855f7','#06b6d4'];
+let pagingState = {
+  frames: Array(16).fill(null),
+  processes: {},
+  nextFrame: 0,
+  pageTable: []
+};
+
+let segState = {
+  segments: [],
+  totalMem: 256
+};
+
+let vmState = {
+  frames: [], vpages: 8, physFrames: 4,
+  pageTable: [], hits: 0, faults: 0, clock: 0,
+  fifoQueue: []
+};
+
+let prState = {
+  frames: [], refStr: [], step: 0,
+  faults: 0, hits: 0, algo: 'fifo',
+  fifoQueue: [], lruTime: []
+};
+
+// ===================== TAB SWITCH =====================
+function switchTab(name) {
+  ['paging','segmentation','virtual','replacement'].forEach(t => {
+    document.getElementById('tab-'+t).classList.add('hidden');
+    document.querySelectorAll('.tab')[['paging','segmentation','virtual','replacement'].indexOf(t)].classList.remove('active');
+  });
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  document.querySelectorAll('.tab')[['paging','segmentation','virtual','replacement'].indexOf(name)].classList.add('active');
+}
+
+// ===================== PAGING =====================
+function renderPagingGrid() {
+  const grid = document.getElementById('paging-grid');
+  grid.innerHTML = '';
+  const colorMap = {};
+  let ci = 0;
+  pagingState.frames.forEach((frame, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'mem-cell ' + (frame ? 'allocated' : 'free');
+    cell.id = 'frame-'+i;
+    if (frame) {
+      if (!colorMap[frame.pid]) colorMap[frame.pid] = COLORS[ci++ % COLORS.length];
+      cell.style.background = colorMap[frame.pid] + '22';
+      cell.style.borderColor = colorMap[frame.pid] + '66';
+      cell.style.color = colorMap[frame.pid];
+      cell.textContent = frame.pid + '\nP' + frame.pageNum;
+      cell.innerHTML = `<span style="font-size:9px;line-height:1.4">${frame.pid}<br>pg${frame.pageNum}</span>`;
+    } else {
+      cell.innerHTML = `<span style="font-size:9px;color:var(--muted)">F${i}<br>FREE</span>`;
+    }
+    grid.appendChild(cell);
+  });
+
+  const used = pagingState.frames.filter(f => f !== null).length;
+  const pct = Math.round(used/16*100);
+  document.getElementById('pg-free-frames').textContent = 16 - used;
+  document.getElementById('pg-used-pct').textContent = pct + '%';
+  document.getElementById('pg-processes').textContent = Object.keys(pagingState.processes).length;
+  document.getElementById('util-fill').style.width = pct + '%';
+  renderPageTable();
+}
+
+function renderPageTable() {
+  const tbody = document.getElementById('page-table-body');
+  if (pagingState.pageTable.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No pages allocated.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = pagingState.pageTable.map(e => `
+    <tr>
+      <td style="font-weight:600">${e.pid}</td>
+      <td>${e.pageNum}</td>
+      <td>${e.frameNum}</td>
+      <td><span class="badge badge-valid">Valid</span></td>
+      <td><span class="badge ${Math.random()>0.5?'badge-modified':''}">—</span></td>
+      <td style="color:var(--accent);font-size:11px">0x${(e.frameNum * 1024).toString(16).toUpperCase().padStart(4,'0')}</td>
+    </tr>
+  `).join('');
+}
+
+function addLog(logId, msg, type='info') {
+  const log = document.getElementById(logId);
+  const t = new Date().toLocaleTimeString('en',{hour12:false});
+  const d = document.createElement('div');
+  d.className = 'log-entry log-'+type;
+  d.textContent = `[${t}] ${msg}`;
+  log.insertBefore(d, log.firstChild);
+}
+
+function allocateProcess() {
+  const pid = document.getElementById('pg-pid').value.trim() || 'P?';
+  const pages = parseInt(document.getElementById('pg-pages').value);
+  const free = pagingState.frames.map((v,i) => v===null?i:-1).filter(i=>i>=0);
+  if (free.length < pages) {
+    addLog('paging-log', `FAILED: Not enough frames for ${pid} (need ${pages}, have ${free.length})`, 'err');
+    return;
+  }
+  if (pagingState.processes[pid]) {
+    addLog('paging-log', `ERROR: Process ${pid} already exists`, 'err');
+    return;
+  }
+  pagingState.processes[pid] = [];
+  for (let i = 0; i < pages; i++) {
+    const f = free[i];
+    pagingState.frames[f] = { pid, pageNum: i };
+    pagingState.pageTable.push({ pid, pageNum: i, frameNum: f });
+    pagingState.processes[pid].push(f);
+    // flash
+    setTimeout(() => {
+      const el = document.getElementById('frame-'+f);
+      if (el) { el.style.transform='scale(1.1)'; setTimeout(()=>el.style.transform='',200); }
+    }, i*80);
+  }
+  addLog('paging-log', `Allocated ${pages} pages to ${pid} → frames [${pagingState.processes[pid].join(',')}]`, 'ok');
+  setTimeout(renderPagingGrid, 100);
+}
+
+function deallocateProcess() {
+  const pid = document.getElementById('pg-pid').value.trim();
+  if (!pagingState.processes[pid]) {
+    addLog('paging-log', `ERROR: Process ${pid} not found`, 'err');
+    return;
+  }
+  pagingState.processes[pid].forEach(f => { pagingState.frames[f] = null; });
+  pagingState.pageTable = pagingState.pageTable.filter(e => e.pid !== pid);
+  delete pagingState.processes[pid];
+  addLog('paging-log', `Freed all pages of ${pid}`, 'warn');
+  renderPagingGrid();
+}
+
+function translateAddress() {
+  const logAddr = parseInt(document.getElementById('pg-logaddr').value, 16);
+  const pageSize = parseInt(document.getElementById('pg-pagesize').value);
+  const pageNum = Math.floor(logAddr / pageSize);
+  const offset = logAddr % pageSize;
+
+  const entry = pagingState.pageTable.find(e => e.pageNum === pageNum);
+  const physAddr = entry ? entry.frameNum * pageSize + offset : null;
+
+  document.getElementById('af-logical').textContent = '0x'+logAddr.toString(16).toUpperCase().padStart(4,'0');
+  document.getElementById('af-page').textContent = pageNum;
+  document.getElementById('af-offset').textContent = offset;
+
+  if (physAddr !== null) {
+    document.getElementById('af-physical').textContent = '0x'+physAddr.toString(16).toUpperCase().padStart(4,'0');
+    document.getElementById('af-physical').style.color = 'var(--green)';
+    addLog('paging-log', `Translation: logical 0x${logAddr.toString(16).toUpperCase()} → pg${pageNum}+${offset} → phys 0x${physAddr.toString(16).toUpperCase()}`, 'ok');
+  } else {
+    document.getElementById('af-physical').textContent = 'PAGE FAULT';
+    document.getElementById('af-physical').style.color = 'var(--red)';
+    addLog('paging-log', `PAGE FAULT: logical 0x${logAddr.toString(16).toUpperCase()} → pg${pageNum} not in memory`, 'err');
+  }
+}
+
+renderPagingGrid();
+
+// ===================== SEGMENTATION =====================
+const segColors = ['#00d4ff','#7c3aed','#00ff88','#ff6b35','#ffd60a','#ff3d5a','#a855f7','#06b6d4'];
+const segTypes = ['Code','Stack','Heap','Data','BSS','Lib','Extra','Temp'];
+
+function addSegment() {
+  const name = document.getElementById('seg-name').value || 'Seg';
+  const size = parseInt(document.getElementById('seg-size').value);
+  const used = segState.segments.reduce((a,s) => a+s.size, 0);
+  if (used + size > segState.totalMem) {
+    alert('Not enough memory! Available: '+(segState.totalMem-used)+' KB');
+    return;
+  }
+  segState.segments.push({ name, size, base: used, color: segColors[segState.segments.length % segColors.length] });
+  renderSegmentation();
+}
+
+function clearSegments() {
+  segState.segments = [];
+  renderSegmentation();
+}
+
+function removeSegment(i) {
+  segState.segments.splice(i, 1);
+  // Recalculate bases
+  let base = 0;
+  segState.segments.forEach(s => { s.base = base; base += s.size; });
+  renderSegmentation();
+}
+
+function renderSegmentation() {
+  const bar = document.getElementById('seg-bar');
+  const tbody = document.getElementById('seg-table-body');
+  const total = segState.totalMem;
+  const used = segState.segments.reduce((a,s) => a+s.size, 0);
+  const free = total - used;
+
+  bar.innerHTML = '';
+  segState.segments.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'seg-bar-item';
+    const pct = s.size/total*100;
+    div.style.width = pct+'%';
+    div.style.background = s.color+'33';
+    div.style.borderRight = '1px solid '+s.color;
+    div.style.color = s.color;
+    div.style.fontSize = pct>8?'10px':'8px';
+    div.title = `${s.name}: ${s.base}KB–${s.base+s.size}KB (${s.size}KB)`;
+    div.textContent = pct>5 ? s.name : '';
+    bar.appendChild(div);
+  });
+  if (free > 0) {
+    const div = document.createElement('div');
+    div.className = 'seg-bar-item';
+    div.style.width = (free/total*100)+'%';
+    div.style.background = 'rgba(30,38,51,0.5)';
+    div.style.color = 'var(--muted)';
+    div.style.fontSize = '9px';
+    div.textContent = free>10?'FREE':'';
+    bar.appendChild(div);
+  }
+
+  if (segState.segments.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No segments.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = segState.segments.map((s,i) => `
+    <tr>
+      <td style="font-weight:600;color:${s.color}">${s.name}</td>
+      <td>${s.base} KB</td>
+      <td>${s.base + s.size} KB</td>
+      <td>${s.size} KB</td>
+      <td><span class="badge" style="background:${s.color}22;color:${s.color}">${segTypes[i%segTypes.length]}</span></td>
+      <td><button class="btn btn-danger" style="padding:3px 8px;font-size:10px" onclick="removeSegment(${i})">Remove</button></td>
+    </tr>
+  `).join('');
+}
+
+function translateSegAddr() {
+  const segNum = parseInt(document.getElementById('seg-trans-num').value);
+  const offset = parseInt(document.getElementById('seg-trans-offset').value);
+  const seg = segState.segments[segNum];
+
+  document.getElementById('sa-seg').textContent = segNum;
+  document.getElementById('sa-offset').textContent = offset + ' KB';
+
+  if (!seg) {
+    document.getElementById('sa-base').textContent = '—';
+    document.getElementById('sa-physical').textContent = 'SEG FAULT';
+    document.getElementById('sa-status').textContent = 'INVALID';
+    document.getElementById('sa-status-box').style.borderColor = 'var(--red)';
+    return;
+  }
+  document.getElementById('sa-base').textContent = seg.base + ' KB';
+  if (offset >= seg.size) {
+    document.getElementById('sa-physical').textContent = 'SEG FAULT';
+    document.getElementById('sa-status').textContent = 'OVERFLOW';
+    document.getElementById('sa-status-box').style.borderColor = 'var(--red)';
+    document.getElementById('sa-physical').style.color = 'var(--red)';
+  } else {
+    const phys = seg.base + offset;
+    document.getElementById('sa-physical').textContent = phys + ' KB';
+    document.getElementById('sa-physical').style.color = 'var(--green)';
+    document.getElementById('sa-status').textContent = 'OK ✓';
+    document.getElementById('sa-status-box').style.borderColor = 'var(--green)';
+    document.getElementById('sa-status').style.color = 'var(--green)';
+  }
+}
+
+renderSegmentation();
+
+// ===================== VIRTUAL MEMORY =====================
+function initVM() {
+  const pf = parseInt(document.getElementById('vm-frames').value);
+  const vp = parseInt(document.getElementById('vm-vpages').value);
+  vmState = { frames: Array(pf).fill(null), vpages: vp, physFrames: pf,
+    pageTable: Array(vp).fill(null).map((_,i)=>({vpn:i,frame:null,present:false,lastUsed:0})),
+    hits:0, faults:0, clock:0, fifoQueue:[] };
+  renderVM();
+  addLog('vm-log','Virtual Memory initialized: '+pf+' frames, '+vp+' virtual pages','info');
+}
+
+function renderVM() {
+  const fv = document.getElementById('vm-frames-view');
+  fv.innerHTML = '';
+  vmState.frames.forEach((v,i) => {
+    const b = document.createElement('div');
+    b.className = 'frame-box ' + (v!==null?'occupied':'');
+    b.innerHTML = v!==null?v:'—';
+    b.title = 'Frame '+i;
+    const lbl = document.createElement('div');
+    lbl.className = 'frame-label';
+    lbl.textContent = 'F'+i;
+    b.appendChild(lbl);
+    fv.appendChild(b);
+  });
+
+  // Swap (pages not in memory)
+  const sv = document.getElementById('vm-swap-view');
+  sv.innerHTML = '';
+  vmState.pageTable.filter(p=>!p.present).forEach(p=>{
+    const b = document.createElement('div');
+    b.className = 'frame-box';
+    b.style.width='44px';b.style.height='44px';b.style.fontSize='12px';
+    b.style.borderColor='var(--muted)';b.style.color='var(--muted)';
+    b.textContent = 'VP'+p.vpn;
+    sv.appendChild(b);
+  });
+
+  const tbody = document.getElementById('vm-pt-body');
+  tbody.innerHTML = vmState.pageTable.map(p=>`
+    <tr>
+      <td>VP${p.vpn}</td>
+      <td>${p.frame!==null?'F'+p.frame:'—'}</td>
+      <td><span class="badge ${p.present?'badge-present':'badge-invalid'}">${p.present?'YES':'NO'}</span></td>
+      <td>${p.lastUsed||'—'}</td>
+    </tr>
+  `).join('');
+
+  const total = vmState.hits + vmState.faults;
+  document.getElementById('vm-hits').textContent = vmState.hits;
+  document.getElementById('vm-faults').textContent = vmState.faults;
+  const rate = total > 0 ? (vmState.hits/total*100).toFixed(1) : 0;
+  document.getElementById('vm-hit-bar').style.width = rate + '%';
+  document.getElementById('vm-hit-pct').textContent = rate + '% hit rate';
+}
+
+function accessPage() {
+  if (!vmState.pageTable.length) { initVM(); }
+  const vpn = parseInt(document.getElementById('vm-access-page').value);
+  if (vpn >= vmState.vpages) { addLog('vm-log','Invalid virtual page number','err'); return; }
+  vmState.clock++;
+  const entry = vmState.pageTable[vpn];
+
+  if (entry.present) {
+    vmState.hits++;
+    entry.lastUsed = vmState.clock;
+    addLog('vm-log', `HIT: VP${vpn} → F${entry.frame} (no fault)`, 'ok');
+    const el = document.getElementById('vm-frames-view').children[entry.frame];
+    if (el) { el.className='frame-box hit'; setTimeout(()=>el.className='frame-box occupied',800); }
+  } else {
+    vmState.faults++;
+    // Find free frame or evict LRU
+    let freeFrame = vmState.frames.indexOf(null);
+    let evictedVPN = null;
+    if (freeFrame === -1) {
+      // LRU eviction
+      const occupied = vmState.pageTable.filter(p=>p.present);
+      occupied.sort((a,b) => (a.lastUsed||0)-(b.lastUsed||0));
+      const victim = occupied[0];
+      evictedVPN = victim.vpn;
+      freeFrame = victim.frame;
+      victim.present = false;
+      victim.frame = null;
+      vmState.frames[freeFrame] = null;
+      addLog('vm-log', `EVICT VP${evictedVPN} from F${freeFrame} (LRU)`, 'warn');
+    }
+    vmState.frames[freeFrame] = vpn;
+    entry.present = true;
+    entry.frame = freeFrame;
+    entry.lastUsed = vmState.clock;
+    addLog('vm-log', `PAGE FAULT: VP${vpn} loaded into F${freeFrame}`, 'err');
+
+    const el = document.getElementById('vm-frames-view').children[freeFrame];
+    if (el) { el.className='frame-box fault'; setTimeout(()=>el.className='frame-box occupied',800); }
+  }
+  setTimeout(renderVM, 100);
+}
+
+initVM();
+
+// ===================== PAGE REPLACEMENT =====================
+function runReplacement() {
+  resetReplacement();
+  const refs = document.getElementById('pr-refstr').value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+  const nf = parseInt(document.getElementById('pr-frames').value);
+  prState.refStr = refs;
+  prState.algo = document.getElementById('pr-algo').value;
+
+  renderRefString(-1);
+  const result = simulate(prState.algo, refs, nf);
+  prState.faults = result.faults;
+  prState.hits = result.hits;
+
+  document.getElementById('pr-total').textContent = refs.length;
+  document.getElementById('pr-faults').textContent = result.faults;
+  document.getElementById('pr-hits').textContent = result.hits;
+  document.getElementById('pr-ratio').textContent = (result.faults/refs.length*100).toFixed(1)+'%';
+
+  // Show final frame state
+  renderFrameBoxes(result.finalFrames, 'none');
+
+  // Log each step
+  const log = document.getElementById('pr-log');
+  log.innerHTML = '';
+  result.steps.forEach((s,i) => {
+    const d = document.createElement('div');
+    d.className = 'log-entry ' + (s.fault ? 'log-err' : 'log-ok');
+    d.textContent = `Step ${i+1}: Access ${s.ref} → ${s.fault?'PAGE FAULT (evict '+s.evict+')':'HIT'} → Frames: [${s.frames.join(', ')}]`;
+    log.appendChild(d);
+  });
+}
+
+function simulate(algo, refs, nf) {
+  let frames = [];
+  let fifo = [];
+  let lruMap = {};
+  let faults = 0, hits = 0;
+  let steps = [];
+
+  for (let i = 0; i < refs.length; i++) {
+    const ref = refs[i];
+    let fault = false, evict = null;
+
+    if (frames.includes(ref)) {
+      hits++;
+      if (algo === 'lru') lruMap[ref] = i;
+    } else {
+      fault = true; faults++;
+      if (frames.length < nf) {
+        frames.push(ref);
+        fifo.push(ref);
+      } else {
+        if (algo === 'fifo') {
+          evict = fifo.shift();
+          frames[frames.indexOf(evict)] = ref;
+          fifo.push(ref);
+        } else if (algo === 'lru') {
+          let minTime = Infinity, victim = null;
+          frames.forEach(f => { if ((lruMap[f]||0) < minTime) { minTime = lruMap[f]||0; victim = f; } });
+          evict = victim;
+          frames[frames.indexOf(evict)] = ref;
+        } else if (algo === 'optimal') {
+          let farthest = -1, victim = null;
+          frames.forEach(f => {
+            const next = refs.indexOf(f, i+1);
+            const idx = next === -1 ? Infinity : next;
+            if (idx > farthest) { farthest = idx; victim = f; }
+          });
+          evict = victim;
+          frames[frames.indexOf(evict)] = ref;
+        }
+      }
+      if (algo === 'lru') lruMap[ref] = i;
+    }
+    steps.push({ ref, fault, evict: evict!==null?evict:'—', frames: [...frames] });
+  }
+  return { faults, hits, steps, finalFrames: frames };
+}
+
+let stepIdx = 0;
+let stepHistory = [];
+
+function stepReplacement() {
+  if (stepIdx === 0) {
+    const refs = document.getElementById('pr-refstr').value.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+    const nf = parseInt(document.getElementById('pr-frames').value);
+    prState.refStr = refs;
+    prState.algo = document.getElementById('pr-algo').value;
+    const result = simulate(prState.algo, refs, nf);
+    stepHistory = result.steps;
+    prState.faults = 0; prState.hits = 0;
+    renderRefString(-1);
+    document.getElementById('pr-frames-view').innerHTML = '';
+  }
+  if (stepIdx >= stepHistory.length) { stepIdx = 0; stepHistory = []; return; }
+
+  const s = stepHistory[stepIdx];
+  renderRefString(stepIdx);
+  renderFrameBoxes(s.frames, s.fault ? 'fault' : 'hit');
+
+  if (s.fault) { prState.faults++; } else { prState.hits++; }
+  const total = prState.faults + prState.hits;
+  document.getElementById('pr-total').textContent = total;
+  document.getElementById('pr-faults').textContent = prState.faults;
+  document.getElementById('pr-hits').textContent = prState.hits;
+  document.getElementById('pr-ratio').textContent = total>0?(prState.faults/total*100).toFixed(1)+'%':'—';
+
+  const log = document.getElementById('pr-log');
+  const d = document.createElement('div');
+  d.className = 'log-entry ' + (s.fault ? 'log-err' : 'log-ok');
+  d.textContent = `Step ${stepIdx+1}: Access ${s.ref} → ${s.fault?'FAULT (evict '+s.evict+')':'HIT'} → [${s.frames.join(', ')}]`;
+  log.insertBefore(d, log.firstChild);
+
+  stepIdx++;
+}
+
+function renderRefString(current) {
+  const rsv = document.getElementById('ref-string-view');
+  rsv.innerHTML = '';
+  prState.refStr.forEach((r,i) => {
+    const c = document.createElement('div');
+    c.className = 'ref-chip';
+    if (i < current) c.classList.add(stepHistory[i]?.fault ? 'fault-chip' : 'hit-chip');
+    else if (i === current) c.classList.add('current');
+    c.textContent = r;
+    rsv.appendChild(c);
+  });
+}
+
+function renderFrameBoxes(frames, mode) {
+  const fv = document.getElementById('pr-frames-view');
+  fv.innerHTML = '';
+  const nf = parseInt(document.getElementById('pr-frames').value);
+  for (let i = 0; i < nf; i++) {
+    const b = document.createElement('div');
+    b.className = 'frame-box';
+    if (frames[i] !== undefined) {
+      b.classList.add(mode === 'none' ? 'occupied' : mode);
+      b.textContent = frames[i];
+    }
+    const lbl = document.createElement('div');
+    lbl.className = 'frame-label';
+    lbl.textContent = 'Frame '+i;
+    b.appendChild(lbl);
+    fv.appendChild(b);
+  }
+}
+
+function resetReplacement() {
+  stepIdx = 0; stepHistory = [];
+  prState.faults = 0; prState.hits = 0;
+  document.getElementById('pr-total').textContent = 0;
+  document.getElementById('pr-faults').textContent = 0;
+  document.getElementById('pr-hits').textContent = 0;
+  document.getElementById('pr-ratio').textContent = '—';
+  document.getElementById('pr-frames-view').innerHTML = '';
+  document.getElementById('ref-string-view').innerHTML = '';
+  document.getElementById('pr-log').innerHTML = '';
+}
+</script>
+</body>
+</html>
